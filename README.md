@@ -18,15 +18,15 @@ Built for swing traders who need to track partial exits, runners, and overall po
 
 ### Spreadsheet
 - **Trade Log** — 1000 rows, one row per matched lot (each sell paired with its entry; runners as their own row)
-- **Dashboard** — KPIs including Total P&L, Win Rate, Best Ticker, Total Fees, Max P&L %, $ Left on Table, plus a Strategy breakdown table, Ticker Performance table, Quarterly Results, and Yearly Results
+- **Dashboard** — KPIs including Total P&L, Win Rate, Best Ticker, Total Fees, Max P&L %, \$ Left on Table, plus a Strategy breakdown table, Ticker Performance table, Quarterly Results, and Yearly Results
 - **Position Summary** — rolls up by Position ID with total P&L, premium paid/received, and **Open Contracts** so you see your runners at a glance
 - **Monthly Calendar** — shows daily P&L for any selected month/year
-- **Auto-calculated columns** — Premium Paid, Premium Received, Max Value, P&L $, P&L %, Max P&L $, Max P&L %, Days Held, Actual R:R, Max R:R, plus TradingView 1H/4H chart links per row
+- **Auto-calculated columns** — Premium Paid, Premium Received, Max Value, P&L \$, P&L %, Max P&L \$, Max P&L %, Days Held, Actual R:R, Max R:R, plus TradingView 1H/4H chart links per row
 - **Smart entry-price lookup** — sell rows without entry prices auto-look up the matching buy via Position ID
 
 ### Parser
 - **Text paste interface** — copy text from a Robinhood PDF, paste, parse
-- **Matched lot output** — for a position bought 10 @ $1.40, sold 5 @ $1.45, sold 1 @ $1.75, sold 3 @ $1.45, the parser produces 4 clean rows: 3 closed sells with their P&L, plus 1 open runner
+- **Matched lot output** — for a position bought 10 @ \$1.40, sold 5 @ \$1.45, sold 1 @ \$1.75, sold 3 @ \$1.45, the parser produces 4 clean rows: 3 closed sells with their P&L, plus 1 open runner
 - **Fee extraction** — sums Comm + Contr Fee + Tran Fee per row
 - **Auto-detects** ticker, option type (Call/Put), strike, expiry, contracts, and dates
 - **Editable preview** — fix anything before copying to the spreadsheet
@@ -75,7 +75,7 @@ The parser is a React component designed to run as a [Claude Artifact](https://c
 For each filled row, the spreadsheet auto-calculates:
 - **Premium Paid** = entry × contracts × 100
 - **Premium Received** = exit × contracts × 100
-- **P&L $** = Received − Paid
+- **P&L \$** = Received − Paid
 - **P&L %** = P&L / Paid
 - **Days Held** = Exit Date − Entry Date
 - **TradingView chart links** for the entry datetime
@@ -83,14 +83,14 @@ For each filled row, the spreadsheet auto-calculates:
 ### Manual columns
 
 These need filling in directly on the spreadsheet:
-- **Contract High (col P)** — the highest price the contract reached during your hold (look it up on TradingView). Required for Max P&L and "$ Left on Table" KPIs to work.
+- **Contract High (col P)** — the highest price the contract reached during your hold (look it up on TradingView). Required for Max P&L and "\$ Left on Table" KPIs to work.
 - **IV Rank (col AC)** and **Notes (col AD)** — optional, for journaling
 
 ---
 
 ## Position ID convention
 
-`TICKER-STRIKE-MMDD` — e.g. `SPY-740-0514` for SPY 5/14/2026 $740 Call
+`TICKER-STRIKE-MMDD` — e.g. `SPY-740-0514` for SPY 5/14/2026 \$740 Call
 
 This is what links partial fills together. The parser generates these automatically.
 
