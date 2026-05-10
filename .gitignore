@@ -1,0 +1,33 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Office temp/lock files
+~$*.xlsx
+~$*.docx
+.~lock.*
+
+# Node (in case parser is wrapped in a webapp later)
+node_modules/
+dist/
+build/
+*.log
+
+# Personal data — don't accidentally commit your actual trades
+trades/
+my_trades.xlsx
+*_personal.xlsx
+*_real.csv
