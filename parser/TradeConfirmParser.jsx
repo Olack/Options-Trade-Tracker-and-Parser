@@ -48,11 +48,12 @@ MATCHING LOGIC — follow exactly:
 3. For positions with ONLY BUY rows (no sells in this confirmation):
    Output ONE combined row: avg entry_price, total contracts, no exit.
 4. For SELL rows with no matching BUY in this confirmation:
-   Output as a SELL row with exit_price filled and entry_price = 0.
+   Output as a SELL row with exit_price filled, entry_price = 0, and entry_date = "".
+   position_id omits the entry suffix — these are orphan sells that close a position opened in an earlier confirmation, and get flagged for manual matching against the existing Trade Log.
 
 Each object must have exactly these fields:
-  position_id  string  "TICKER-STRIKE-MMDD" e.g. "SPY-740-0514"
-  entry_date   string  MM/DD/YYYY for open/BUY rows; "" for SELL rows
+  position_id  string  "TICKER-STRIKE-EXPMMDD-ENTRYMMDD" e.g. "SPY-740-0514-0506" — EXPMMDD = expiry month+day, ENTRYMMDD = entry (BUY) trade date month+day. This groups every lot from one open together with all of its closes, and keeps separate trade cycles of the same contract distinct. For SELL rows with no matching BUY in this confirmation, OMIT the entry suffix: "TICKER-STRIKE-EXPMMDD" e.g. "SPY-740-0514"
+  entry_date   string  MM/DD/YYYY — the BUY/open trade date. REQUIRED on open BUY rows AND on matched SELL rows (use the matched BUY's trade date, per step 2b). "" ONLY for SELL rows with no matching BUY in this confirmation (step 4)
   exit_date    string  MM/DD/YYYY for closed/SELL rows; "" for open rows
   ticker       string  Stock symbol e.g. "SPY"
   type         string  "C" for CALL, "P" for PUT
@@ -106,6 +107,49 @@ function cleanTrades(raw) {
     exit_price:  (t.action==="BUY" || !t.exit_price || t.exit_price===0) ? "" : t.exit_price,
     fees: t.fees || "",
   }));
+}
+
+// Reconciliation checks — surface things the parser can't fix on its own
+// because it only ever sees one confirmation at a time.
+function computeWarnings(trades) {
+  const out = [];
+  // group by contract (ticker + strike + expiry), ignoring entry-date suffix
+  const byContract = {};
+  trades.forEach(t => {
+    const k = `${t.ticker}|${t.strike}|${t.expiry}`;
+    (byContract[k] = byContract[k] || []).push(t);
+  });
+
+  // A) Orphan sells — a SELL with no matching BUY in this confirmation.
+  // It almost always closes a position already sitting OPEN in the Trade Log.
+  trades.forEach(t => {
+    if (t.action === "SELL" && !t.entry_date) {
+      out.push({
+        level: "warn",
+        text: `${t.position_id || t.ticker}: sell of ${t.contracts||"?"} contract(s) has no matching buy here. It likely closes a position already in your Trade Log — update that open row's exit instead of pasting this as a new position, or you'll double-count.`,
+      });
+    }
+  });
+
+  // B) Open lots — distinguish a brand-new open position from a partial fill.
+  Object.values(byContract).forEach(rows => {
+    const sells = rows.filter(r => r.action === "SELL");
+    rows.filter(r => r.action === "BUY").forEach(b => {
+      if (sells.length) {
+        out.push({
+          level: "info",
+          text: `${b.position_id}: partial fill — some contracts sold, ${b.contracts||"?"} still open. This open lot stays in your log until a later confirmation closes it.`,
+        });
+      } else {
+        out.push({
+          level: "info",
+          text: `${b.position_id}: new open position, ${b.contracts||"?"} contract(s) @ ${b.entry_price||"?"}. Stays open until a later confirmation closes it.`,
+        });
+      }
+    });
+  });
+
+  return out;
 }
 
 export default function TradeConfirmParser() {
@@ -216,6 +260,8 @@ export default function TradeConfirmParser() {
   const buys  = trades.filter(t=>t.action==="BUY").length;
   const sells = trades.filter(t=>t.action==="SELL").length;
   const totalFees = trades.reduce((s,t)=>s+(parseFloat(t.fees)||0),0);
+  const warnings = computeWarnings(trades);
+  const warnCount = warnings.filter(w=>w.level==="warn").length;
 
   const C = {
     wrap: { fontFamily:"'IBM Plex Mono','Courier New',monospace", background:"#0A0E1A", minHeight:"100vh", color:"#E2E8F0" },
@@ -226,6 +272,11 @@ export default function TradeConfirmParser() {
     textarea: { width:"100%", minHeight:180, background:"#0D1525", border:"1px solid #1E3A5F", borderRadius:10, padding:"14px 16px", color:"#E2E8F0", fontFamily:"inherit", fontSize:10, outline:"none", resize:"vertical", lineHeight:1.6, boxSizing:"border-box" },
     btn: (on) => ({ width:"100%", padding:13, borderRadius:8, border:"none", fontFamily:"inherit", fontSize:12, fontWeight:700, letterSpacing:".4px", cursor:on?"pointer":"not-allowed", background:on?"#1D4ED8":"#1E293B", color:on?"#fff":"#475569", transition:"all .2s" }),
     error: { background:"#2D1515", border:"1px solid #7F1D1D", borderRadius:8, padding:"10px 14px", color:"#FCA5A5", fontSize:11, marginBottom:12, wordBreak:"break-word" },
+    warnRow: (lvl) => ({
+      display:"flex", gap:8, alignItems:"flex-start", padding:"7px 11px", fontSize:10, lineHeight:1.5,
+      borderBottom:"1px solid #0D1525",
+      color: lvl==="warn" ? "#FCD34D" : "#7DD3FC",
+    }),
     th: (auto) => ({ padding:"9px 7px", color:auto?"#22C55E":"#F59E0B", fontWeight:600, borderBottom:"1px solid #1E3A5F", whiteSpace:"nowrap", background:"#0D1829", textAlign:"left" }),
     td: { padding:"4px 5px", borderBottom:"1px solid #0D1525" },
     inp: (auto,has,foc,fees) => ({
@@ -294,6 +345,23 @@ export default function TradeConfirmParser() {
                 {totalFees>0&&<span style={{color:"#FCA5A5"}}>💸 ${totalFees.toFixed(2)} fees</span>}
               </div>
             </div>
+
+            {warnings.length>0&&(
+              <div style={{border:"1px solid #1E3A5F",borderRadius:10,marginBottom:14,overflow:"hidden"}}>
+                <div style={{background:"#0D1829",padding:"9px 12px",fontSize:11,fontWeight:700,
+                  color: warnCount>0 ? "#F59E0B" : "#3B82F6", borderBottom:"1px solid #1E3A5F"}}>
+                  🔎  Reconciliation — {warnCount>0
+                    ? `${warnCount} row${warnCount>1?"s":""} need a manual check before you paste`
+                    : "no issues, just a heads-up on open positions"}
+                </div>
+                {warnings.map((w,i)=>(
+                  <div key={i} style={C.warnRow(w.level)}>
+                    <span style={{flexShrink:0}}>{w.level==="warn"?"⚠️":"📌"}</span>
+                    <span>{w.text}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div style={{overflowX:"auto",borderRadius:10,border:"1px solid #1E3A5F",marginBottom:14}}>
               <table style={{borderCollapse:"collapse",width:"100%",fontSize:10}}>
